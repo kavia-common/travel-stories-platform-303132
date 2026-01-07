@@ -29,7 +29,78 @@ if (!fs.existsSync(uploadsDir)){
 
 const app = express();
 
-app.use(cors({ origin: '*' }));
+/**
+ * CORS / Preflight handling
+ * - The frontend runs on port 3000; backend runs on port 3001.
+ * - Requests may hit both /api/* and non-/api paths (e.g. /auth/register) depending on FE configuration.
+ * - We therefore handle preflight globally and configure an origin allowlist.
+ *
+ * ENV:
+ *  - REACT_APP_FRONTEND_URL: optional; if set, is treated as an allowed Origin.
+ */
+const allowedOrigins = new Set(
+  [
+    process.env.REACT_APP_FRONTEND_URL, // e.g. https://...:3000
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ].filter(Boolean)
+);
+
+// We echo back the origin when allowed (required if credentials are ever enabled).
+const corsOptionsDelegate = (req, callback) => {
+  const requestOrigin = req.header('Origin');
+
+  // Non-browser clients (no Origin header) should be allowed.
+  if (!requestOrigin) {
+    return callback(null, {
+      origin: false, // do not add ACAO header when there is no Origin
+    });
+  }
+
+  if (allowedOrigins.has(requestOrigin)) {
+    return callback(null, {
+      origin: requestOrigin,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Requested-With',
+        'Accept',
+        'Origin',
+      ],
+      exposedHeaders: ['Content-Length'],
+      maxAge: 86400, // cache preflight for 24h
+      optionsSuccessStatus: 204,
+    });
+  }
+
+  // Reject unknown origins but still respond (without ACAO) instead of crashing.
+  return callback(null, {
+    origin: false,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    maxAge: 86400,
+    optionsSuccessStatus: 204,
+  });
+};
+
+app.use(cors(corsOptionsDelegate));
+
+/**
+ * Global preflight handler.
+ * This ensures OPTIONS never falls through to missing routes / upstream 502s.
+ */
+app.options('*', cors(corsOptionsDelegate));
+
 app.use(express.json());
 
 // Serve static files
@@ -61,10 +132,19 @@ app.use('/docs', swaggerUi.serve, (req, res, next) => {
   swaggerUi.setup(dynamicSpec)(req, res, next);
 });
 
-// Routes
+// Routes (canonical)
 app.use('/api/auth', authRoutes);
 app.use('/api/stories', storyRoutes);
 app.use('/api/upload', uploadRoutes);
+
+/**
+ * Backwards-compatible route aliases.
+ * Some frontends may call /auth/* instead of /api/auth/*.
+ * Keeping these prevents CORS/preflight failures due to path mismatch.
+ */
+app.use('/auth', authRoutes);
+app.use('/stories', storyRoutes);
+app.use('/upload', uploadRoutes);
 
 // Health check
 app.get('/', (req, res) => {
