@@ -29,7 +29,7 @@ ACCESS_TOKEN_SECRET=your_super_secret_key_here
 - `GET /api/stories/:id` - Get a story by ID
 - `PUT /api/stories/:id` - Update a story
 - `DELETE /api/stories/:id` - Delete a story
-- `POST /api/stories/:id/pin` - Toggle story pin status
+- `PATCH /api/stories/:id/pin` - Toggle story pin status
 
 ### Upload
 - `POST /api/upload` - Upload an image (Form-data: `image`)

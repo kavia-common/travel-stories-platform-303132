@@ -14,7 +14,7 @@ const errorHandler = require('./middleware/errorHandler');
 require('dotenv').config();
 
 if (!process.env.ACCESS_TOKEN_SECRET) {
-    console.error("FATAL ERROR: ACCESS_TOKEN_SECRET is not defined.");
+    console.error('FATAL ERROR: ACCESS_TOKEN_SECRET is not defined.');
     process.exit(1);
 }
 

@@ -11,7 +11,130 @@ const { body, validationResult } = require('express-validator');
  *   description: Story management
  */
 
-// Get all stories (Search, Filter, Pagination, Sort)
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Story:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *         title:
+ *           type: string
+ *         content:
+ *           type: string
+ *         location:
+ *           type: string
+ *         tags:
+ *           type: array
+ *           items:
+ *             type: string
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         pinned:
+ *           type: boolean
+ *         author:
+ *           type: string
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
+ *     StoryInput:
+ *       type: object
+ *       required:
+ *         - title
+ *         - content
+ *       properties:
+ *         title:
+ *           type: string
+ *         content:
+ *           type: string
+ *         location:
+ *           type: string
+ *         tags:
+ *           type: array
+ *           items:
+ *             type: string
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         pinned:
+ *           type: boolean
+ */
+
+/**
+ * @swagger
+ * /api/stories:
+ *   get:
+ *     summary: Get all stories with search, filter, and pagination
+ *     tags: [Stories]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Search term for title, content, or tags
+ *       - in: query
+ *         name: tag
+ *         schema:
+ *           type: string
+ *         description: Filter by specific tag
+ *       - in: query
+ *         name: pinned
+ *         schema:
+ *           type: boolean
+ *         description: Filter by pinned status (true/false)
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of items per page
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [newest, oldest]
+ *           default: newest
+ *         description: Sort order
+ *     responses:
+ *       200:
+ *         description: List of stories
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 stories:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Story'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const { q, tag, pinned, page = 1, limit = 10, sort } = req.query;
@@ -61,7 +184,35 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// Create Story
+/**
+ * @swagger
+ * /api/stories:
+ *   post:
+ *     summary: Create a new story
+ *     tags: [Stories]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StoryInput'
+ *     responses:
+ *       201:
+ *         description: Story created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 story:
+ *                   $ref: '#/components/schemas/Story'
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Validation error
+ */
 router.post('/', [auth, 
     body('title').notEmpty().withMessage('Title is required'),
     body('content').notEmpty().withMessage('Content is required')
@@ -82,7 +233,34 @@ router.post('/', [auth,
     }
 });
 
-// Get Story by ID
+/**
+ * @swagger
+ * /api/stories/{id}:
+ *   get:
+ *     summary: Get a story by ID
+ *     tags: [Stories]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Story ID
+ *     responses:
+ *       200:
+ *         description: Story details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 story:
+ *                   $ref: '#/components/schemas/Story'
+ *       404:
+ *         description: Story not found
+ */
 router.get('/:id', auth, async (req, res) => {
     try {
         const story = await Story.findOne({ _id: req.params.id, author: req.user.id });
@@ -93,7 +271,42 @@ router.get('/:id', auth, async (req, res) => {
     }
 });
 
-// Update Story
+/**
+ * @swagger
+ * /api/stories/{id}:
+ *   put:
+ *     summary: Update a story
+ *     tags: [Stories]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Story ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StoryInput'
+ *     responses:
+ *       200:
+ *         description: Story updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 story:
+ *                   $ref: '#/components/schemas/Story'
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Story not found
+ */
 router.put('/:id', auth, async (req, res) => {
     try {
         const { title, content, location, tags, images, pinned } = req.body;
@@ -114,7 +327,27 @@ router.put('/:id', auth, async (req, res) => {
     }
 });
 
-// Delete Story
+/**
+ * @swagger
+ * /api/stories/{id}:
+ *   delete:
+ *     summary: Delete a story
+ *     tags: [Stories]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Story ID
+ *     responses:
+ *       200:
+ *         description: Story deleted successfully
+ *       404:
+ *         description: Story not found
+ */
 router.delete('/:id', auth, async (req, res) => {
     try {
         const story = await Story.findOneAndDelete({ _id: req.params.id, author: req.user.id });
@@ -125,8 +358,37 @@ router.delete('/:id', auth, async (req, res) => {
     }
 });
 
-// Toggle Pin
-router.post('/:id/pin', auth, async (req, res) => {
+/**
+ * @swagger
+ * /api/stories/{id}/pin:
+ *   patch:
+ *     summary: Toggle story pin status
+ *     tags: [Stories]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Story ID
+ *     responses:
+ *       200:
+ *         description: Story pin status updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 story:
+ *                   $ref: '#/components/schemas/Story'
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Story not found
+ */
+router.patch('/:id/pin', auth, async (req, res) => {
     try {
         const story = await Story.findOne({ _id: req.params.id, author: req.user.id });
         if (!story) return res.status(404).json({ message: 'Story not found' });
