@@ -13,6 +13,11 @@ const errorHandler = require('./middleware/errorHandler');
 
 require('dotenv').config();
 
+if (!process.env.ACCESS_TOKEN_SECRET) {
+    console.error("FATAL ERROR: ACCESS_TOKEN_SECRET is not defined.");
+    process.exit(1);
+}
+
 // Connect to Database
 connectDB();
 
@@ -24,7 +29,7 @@ if (!fs.existsSync(uploadsDir)){
 
 const app = express();
 
-app.use(cors({ origin: 'http://localhost:3000' }));
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // Serve static files
