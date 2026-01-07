@@ -36,6 +36,14 @@ const auth = require('../middleware/auth');
  *       400:
  *         description: Validation error or user exists
  */
+/**
+ * Explicit preflight endpoint to avoid proxy/framework edge-cases where OPTIONS isn't handled
+ * as expected for auth routes.
+ */
+router.options(['/', '/register', '/login', '/me'], (req, res) => {
+  return res.sendStatus(204);
+});
+
 router.post('/register', [
   body('name').notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Invalid email'),

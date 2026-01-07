@@ -40,7 +40,7 @@ const app = express();
  */
 const allowedOrigins = new Set(
   [
-    process.env.REACT_APP_FRONTEND_URL, // e.g. https://...:3000
+    process.env.REACT_APP_FRONTEND_URL, // optional explicit full origin, e.g. https://...:3000
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:5173',
@@ -48,18 +48,25 @@ const allowedOrigins = new Set(
   ].filter(Boolean)
 );
 
+// Cloud preview environments can have varying ports; allow the same host for any port.
+const allowedOriginRegexes = [
+  /^https?:\/\/vscode-internal-[^/]+\.cloud\.kavia\.ai(?::\d+)?$/i,
+];
+
 // We echo back the origin when allowed (required if credentials are ever enabled).
 const corsOptionsDelegate = (req, callback) => {
   const requestOrigin = req.header('Origin');
 
-  // Non-browser clients (no Origin header) should be allowed.
+  // Non-browser clients (no Origin header) should be allowed (no ACAO header needed).
   if (!requestOrigin) {
-    return callback(null, {
-      origin: false, // do not add ACAO header when there is no Origin
-    });
+    return callback(null, { origin: false });
   }
 
-  if (allowedOrigins.has(requestOrigin)) {
+  const isAllowed =
+    allowedOrigins.has(requestOrigin) ||
+    allowedOriginRegexes.some((re) => re.test(requestOrigin));
+
+  if (isAllowed) {
     return callback(null, {
       origin: requestOrigin,
       credentials: true,
@@ -77,7 +84,7 @@ const corsOptionsDelegate = (req, callback) => {
     });
   }
 
-  // Reject unknown origins but still respond (without ACAO) instead of crashing.
+  // Respond without ACAO for unknown origins.
   return callback(null, {
     origin: false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
