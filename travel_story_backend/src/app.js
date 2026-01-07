@@ -1,21 +1,39 @@
-const cors = require('cors');
 const express = require('express');
-const routes = require('./routes');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');
 
-// Initialize express app
+const connectDB = require('./config/db');
+const authRoutes = require('./routes/auth');
+const storyRoutes = require('./routes/stories');
+const uploadRoutes = require('./routes/upload');
+const errorHandler = require('./middleware/errorHandler');
+
+require('dotenv').config();
+
+// Connect to Database
+connectDB();
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)){
+    fs.mkdirSync(uploadsDir);
+}
+
 const app = express();
 
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-app.set('trust proxy', true);
+app.use(cors({ origin: 'http://localhost:3000' }));
+app.use(express.json());
+
+// Serve static files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Swagger
 app.use('/docs', swaggerUi.serve, (req, res, next) => {
-  const host = req.get('host');           // may or may not include port
-  let protocol = req.protocol;          // http or https
+  const host = req.get('host');
+  let protocol = req.protocol;
 
   const actualPort = req.socket.localPort;
   const hasPort = host.includes(':');
@@ -38,19 +56,17 @@ app.use('/docs', swaggerUi.serve, (req, res, next) => {
   swaggerUi.setup(dynamicSpec)(req, res, next);
 });
 
-// Parse JSON request body
-app.use(express.json());
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/stories', storyRoutes);
+app.use('/api/upload', uploadRoutes);
 
-// Mount routes
-app.use('/', routes);
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    status: 'error',
-    message: 'Internal Server Error',
-  });
+// Health check
+app.get('/', (req, res) => {
+    res.json({ status: 'ok', message: 'Travel Story Backend API' });
 });
+
+// Error Handler
+app.use(errorHandler);
 
 module.exports = app;
