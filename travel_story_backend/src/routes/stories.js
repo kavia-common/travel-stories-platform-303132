@@ -54,19 +54,61 @@ const { body, validationResult } = require('express-validator');
  *           type: string
  *         content:
  *           type: string
+ *         story:
+ *           type: string
+ *           description: Alias for content (frontend compatibility)
  *         location:
  *           type: string
  *         tags:
  *           type: array
  *           items:
  *             type: string
+ *         visitedLocation:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: Alias for tags (frontend compatibility)
  *         images:
  *           type: array
  *           items:
  *             type: string
+ *         imageUrl:
+ *           type: string
+ *           description: Single image URL (frontend compatibility)
+ *         visitedDate:
+ *           type: number
+ *           description: Timestamp of visit date (frontend compatibility, stored in metadata)
  *         pinned:
  *           type: boolean
  */
+
+/**
+ * Middleware to normalize frontend payload to backend schema.
+ * Maps frontend field names to backend expected names for backward compatibility.
+ */
+const normalizeStoryPayload = (req, res, next) => {
+  const body = req.body;
+  
+  // Map 'story' to 'content' if content is not provided
+  if (body.story && !body.content) {
+    body.content = body.story;
+  }
+  
+  // Map 'imageUrl' (single string) to 'images' (array) if images is not provided
+  if (body.imageUrl && !body.images) {
+    body.images = body.imageUrl ? [body.imageUrl] : [];
+  }
+  
+  // Map 'visitedLocation' (array) to 'tags' if tags is not provided
+  if (body.visitedLocation && !body.tags) {
+    body.tags = Array.isArray(body.visitedLocation) ? body.visitedLocation : [];
+  }
+  
+  // visitedDate is stored but not in the Story model, we can ignore it or add to a metadata field
+  // For now, we'll just let it pass through harmlessly
+  
+  next();
+};
 
 /**
  * @swagger
@@ -213,17 +255,26 @@ router.get('/', auth, async (req, res) => {
  *       400:
  *         description: Validation error
  */
-router.post('/', [auth, 
+router.post('/', [
+    auth,
+    normalizeStoryPayload,
     body('title').notEmpty().withMessage('Title is required'),
     body('content').notEmpty().withMessage('Content is required')
 ], async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
 
     try {
         const { title, content, location, tags, images, pinned } = req.body;
         const story = new Story({
-            title, content, location, tags, images, pinned,
+            title, 
+            content, 
+            location, 
+            tags, 
+            images, 
+            pinned,
             author: req.user.id
         });
         await story.save();
@@ -307,7 +358,7 @@ router.get('/:id', auth, async (req, res) => {
  *       404:
  *         description: Story not found
  */
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', [auth, normalizeStoryPayload], async (req, res) => {
     try {
         const { title, content, location, tags, images, pinned } = req.body;
         const story = await Story.findOne({ _id: req.params.id, author: req.user.id });
