@@ -89,6 +89,9 @@ const { body, validationResult } = require('express-validator');
 const normalizeStoryPayload = (req, res, next) => {
   const body = req.body;
   
+  // Log incoming payload for debugging
+  console.log('Incoming payload:', JSON.stringify(body, null, 2));
+  
   // Map 'story' to 'content' if content is not provided
   if (body.story && !body.content) {
     body.content = body.story;
@@ -97,15 +100,34 @@ const normalizeStoryPayload = (req, res, next) => {
   // Map 'imageUrl' (single string) to 'images' (array) if images is not provided
   if (body.imageUrl && !body.images) {
     body.images = body.imageUrl ? [body.imageUrl] : [];
+  } else if (body.images && !Array.isArray(body.images)) {
+    // Ensure images is always an array
+    body.images = [body.images];
   }
   
-  // Map 'visitedLocation' (array) to 'tags' if tags is not provided
-  if (body.visitedLocation && !body.tags) {
-    body.tags = Array.isArray(body.visitedLocation) ? body.visitedLocation : [];
+  // Map 'visitedLocation' (array) to both 'tags' and 'location' (first element)
+  if (body.visitedLocation && Array.isArray(body.visitedLocation)) {
+    if (!body.tags) {
+      body.tags = body.visitedLocation;
+    }
+    // Set location to first visited location if not explicitly provided
+    if (!body.location && body.visitedLocation.length > 0) {
+      body.location = body.visitedLocation[0];
+    }
   }
   
-  // visitedDate is stored but not in the Story model, we can ignore it or add to a metadata field
-  // For now, we'll just let it pass through harmlessly
+  // Ensure tags is an array
+  if (body.tags && !Array.isArray(body.tags)) {
+    body.tags = [body.tags];
+  }
+  
+  // Remove fields that aren't in the Story model to avoid validation issues
+  delete body.story;
+  delete body.imageUrl;
+  delete body.visitedLocation;
+  delete body.visitedDate;
+  
+  console.log('Normalized payload:', JSON.stringify(body, null, 2));
   
   next();
 };
@@ -257,31 +279,45 @@ router.get('/', auth, async (req, res) => {
  */
 router.post('/', [
     auth,
-    normalizeStoryPayload,
     body('title').notEmpty().withMessage('Title is required'),
-    body('content').notEmpty().withMessage('Content is required')
+    body('content').optional(),
+    body('story').optional(),
 ], async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-    }
+    // Normalize payload after validation but before checking results
+    normalizeStoryPayload(req, res, () => {
+        const errors = validationResult(req);
+        
+        // Check if either content or story was provided after normalization
+        if (!req.body.content) {
+            return res.status(400).json({ 
+                errors: [{ msg: 'Content or story field is required', param: 'content' }] 
+            });
+        }
+        
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
 
-    try {
-        const { title, content, location, tags, images, pinned } = req.body;
-        const story = new Story({
-            title, 
-            content, 
-            location, 
-            tags, 
-            images, 
-            pinned,
-            author: req.user.id
-        });
-        await story.save();
-        res.status(201).json({ story, message: 'Story added successfully' });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+        (async () => {
+            try {
+                const { title, content, location, tags, images, pinned } = req.body;
+                const story = new Story({
+                    title, 
+                    content, 
+                    location: location || '', 
+                    tags: tags || [], 
+                    images: images || [], 
+                    pinned: pinned || false,
+                    author: req.user.id
+                });
+                await story.save();
+                res.status(201).json({ story, message: 'Story added successfully' });
+            } catch (error) {
+                console.error('Error creating story:', error);
+                res.status(500).json({ message: error.message });
+            }
+        })();
+    });
 });
 
 /**
@@ -358,24 +394,27 @@ router.get('/:id', auth, async (req, res) => {
  *       404:
  *         description: Story not found
  */
-router.put('/:id', [auth, normalizeStoryPayload], async (req, res) => {
-    try {
-        const { title, content, location, tags, images, pinned } = req.body;
-        const story = await Story.findOne({ _id: req.params.id, author: req.user.id });
-        if (!story) return res.status(404).json({ message: 'Story not found' });
+router.put('/:id', [auth], async (req, res) => {
+    normalizeStoryPayload(req, res, async () => {
+        try {
+            const { title, content, location, tags, images, pinned } = req.body;
+            const story = await Story.findOne({ _id: req.params.id, author: req.user.id });
+            if (!story) return res.status(404).json({ message: 'Story not found' });
 
-        story.title = title || story.title;
-        story.content = content || story.content;
-        story.location = location || story.location;
-        story.tags = tags || story.tags;
-        story.images = images || story.images;
-        if (pinned !== undefined) story.pinned = pinned;
+            if (title !== undefined) story.title = title;
+            if (content !== undefined) story.content = content;
+            if (location !== undefined) story.location = location;
+            if (tags !== undefined) story.tags = tags;
+            if (images !== undefined) story.images = images;
+            if (pinned !== undefined) story.pinned = pinned;
 
-        await story.save();
-        res.json({ story, message: 'Story updated successfully' });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+            await story.save();
+            res.json({ story, message: 'Story updated successfully' });
+        } catch (error) {
+            console.error('Error updating story:', error);
+            res.status(500).json({ message: error.message });
+        }
+    });
 });
 
 /**
